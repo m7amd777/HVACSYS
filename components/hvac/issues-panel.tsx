@@ -1,0 +1,326 @@
+'use client';
+
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  AlertTriangle,
+  AlertCircle,
+  Info,
+  Wrench,
+  Lightbulb,
+  Check,
+  Clock,
+  ChevronRight,
+  Sparkles,
+} from 'lucide-react';
+import { useHVACStore } from '@/lib/hvac-store';
+import type { Issue, MaintenanceEvent, Recommendation } from '@/lib/hvac-types';
+import { cn } from '@/lib/utils';
+import { formatDistanceToNow } from 'date-fns';
+
+const severityConfig = {
+  critical: { icon: AlertTriangle, className: 'text-destructive', bgClassName: 'bg-destructive/10' },
+  warning: { icon: AlertCircle, className: 'text-warning', bgClassName: 'bg-warning/10' },
+  info: { icon: Info, className: 'text-primary', bgClassName: 'bg-primary/10' },
+};
+
+function IssueItem({ issue, onAcknowledge, onResolve }: { 
+  issue: Issue; 
+  onAcknowledge: () => void;
+  onResolve: () => void;
+}) {
+  const config = severityConfig[issue.severity];
+  const Icon = config.icon;
+  const timeAgo = formatDistanceToNow(new Date(issue.timestamp), { addSuffix: true });
+
+  return (
+    <div className={cn(
+      'group rounded-lg border p-3 transition-colors hover:border-primary/30',
+      issue.status === 'resolved' ? 'opacity-60' : '',
+      issue.severity === 'critical' ? 'border-destructive/30' :
+      issue.severity === 'warning' ? 'border-warning/30' : 'border-border'
+    )}>
+      <div className="flex items-start gap-3">
+        <div className={cn('mt-0.5 rounded-md p-1.5', config.bgClassName)}>
+          <Icon className={cn('h-3.5 w-3.5', config.className)} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm font-medium leading-tight text-foreground">{issue.title}</p>
+            <Badge 
+              variant="outline" 
+              className={cn(
+                'shrink-0 text-[10px]',
+                issue.status === 'resolved' ? 'border-accent text-accent' :
+                issue.status === 'acknowledged' ? 'border-primary text-primary' :
+                config.className
+              )}
+            >
+              {issue.status}
+            </Badge>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{issue.description}</p>
+          <div className="mt-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Clock className="h-3 w-3" />
+              <span>{timeAgo}</span>
+              <span className="text-border">|</span>
+              <span>{issue.source}</span>
+            </div>
+            {issue.status === 'open' && (
+              <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-6 px-2 text-xs"
+                  onClick={onAcknowledge}
+                >
+                  Acknowledge
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-6 px-2 text-xs"
+                  onClick={onResolve}
+                >
+                  Resolve
+                </Button>
+              </div>
+            )}
+          </div>
+          {issue.suggestedAction && issue.status === 'open' && (
+            <div className="mt-2 flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1.5 text-xs text-muted-foreground">
+              <Lightbulb className="h-3 w-3 shrink-0 text-primary" />
+              <span>{issue.suggestedAction}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MaintenanceItem({ event }: { event: MaintenanceEvent }) {
+  const eventDate = new Date(event.date);
+  const isOverdue = event.status === 'overdue';
+  const isPast = eventDate < new Date();
+
+  return (
+    <div className={cn(
+      'rounded-lg border p-3',
+      isOverdue ? 'border-destructive/30' : 'border-border'
+    )}>
+      <div className="flex items-start gap-3">
+        <div className={cn(
+          'mt-0.5 rounded-md p-1.5',
+          isOverdue ? 'bg-destructive/10' : 'bg-muted'
+        )}>
+          <Wrench className={cn('h-3.5 w-3.5', isOverdue ? 'text-destructive' : 'text-muted-foreground')} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm font-medium leading-tight text-foreground">{event.title}</p>
+            <Badge 
+              variant="outline" 
+              className={cn(
+                'shrink-0 text-[10px]',
+                event.status === 'completed' ? 'border-accent text-accent' :
+                event.status === 'overdue' ? 'border-destructive text-destructive' :
+                event.status === 'in-progress' ? 'border-primary text-primary' :
+                'border-muted-foreground'
+              )}
+            >
+              {event.status}
+            </Badge>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">{event.note}</p>
+          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+            <Clock className="h-3 w-3" />
+            <span>
+              {isPast && event.status !== 'completed' ? 'Was scheduled for ' : 'Scheduled for '}
+              {eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </span>
+            <span className="text-border">|</span>
+            <span>{event.componentType}: {event.componentId}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecommendationItem({ rec }: { rec: Recommendation }) {
+  const typeConfig = {
+    'energy-saving': { icon: Lightbulb, className: 'text-accent' },
+    'comfort': { icon: Sparkles, className: 'text-primary' },
+    'maintenance': { icon: Wrench, className: 'text-warning' },
+    'optimization': { icon: Sparkles, className: 'text-primary' },
+  };
+  const config = typeConfig[rec.type];
+  const Icon = config.icon;
+
+  return (
+    <div className="group rounded-lg border border-primary/20 bg-primary/5 p-3 transition-colors hover:border-primary/40">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 rounded-md bg-primary/10 p-1.5">
+          <Icon className={cn('h-3.5 w-3.5', config.className)} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm font-medium leading-tight text-foreground">{rec.title}</p>
+            <Badge variant="outline" className="shrink-0 text-[10px] border-primary/30 text-primary">
+              {rec.confidenceScore}%
+            </Badge>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{rec.rationale}</p>
+          <div className="mt-2 flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">
+              Impact: {rec.estimatedImpact}
+            </span>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-6 gap-1 px-2 text-xs opacity-0 transition-opacity group-hover:opacity-100"
+            >
+              Apply
+              <ChevronRight className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function IssuesPanel() {
+  const { issues, maintenanceEvents, recommendations, acknowledgeIssue, resolveIssue } = useHVACStore();
+  const [activeTab, setActiveTab] = useState('all');
+
+  const openIssues = issues.filter(i => i.status === 'open');
+  const criticalCount = openIssues.filter(i => i.severity === 'critical').length;
+  const warningCount = openIssues.filter(i => i.severity === 'warning').length;
+  const scheduledMaintenance = maintenanceEvents.filter(e => e.status !== 'completed');
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div>
+            <CardTitle className="text-base font-semibold">Issues & Maintenance</CardTitle>
+            <CardDescription className="mt-1 text-xs">
+              {openIssues.length} open issues, {scheduledMaintenance.length} maintenance items
+            </CardDescription>
+          </div>
+          {criticalCount > 0 && (
+            <Badge variant="destructive" className="text-[10px]">
+              {criticalCount} Critical
+            </Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid h-8 w-full grid-cols-4">
+            <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
+            <TabsTrigger value="issues" className="text-xs">
+              Issues
+              {openIssues.length > 0 && (
+                <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
+                  {openIssues.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="maintenance" className="text-xs">Maint.</TabsTrigger>
+            <TabsTrigger value="recommendations" className="text-xs">AI</TabsTrigger>
+          </TabsList>
+
+          <ScrollArea className="mt-4 h-[340px] pr-4">
+            <TabsContent value="all" className="m-0 space-y-3">
+              {/* Critical issues first */}
+              {openIssues
+                .filter(i => i.severity === 'critical')
+                .map(issue => (
+                  <IssueItem 
+                    key={issue.id} 
+                    issue={issue}
+                    onAcknowledge={() => acknowledgeIssue(issue.id)}
+                    onResolve={() => resolveIssue(issue.id)}
+                  />
+                ))}
+              {/* Then recommendations */}
+              {recommendations.slice(0, 2).map(rec => (
+                <RecommendationItem key={rec.id} rec={rec} />
+              ))}
+              {/* Then warnings */}
+              {openIssues
+                .filter(i => i.severity === 'warning')
+                .map(issue => (
+                  <IssueItem 
+                    key={issue.id} 
+                    issue={issue}
+                    onAcknowledge={() => acknowledgeIssue(issue.id)}
+                    onResolve={() => resolveIssue(issue.id)}
+                  />
+                ))}
+              {/* Then maintenance */}
+              {scheduledMaintenance.slice(0, 2).map(event => (
+                <MaintenanceItem key={event.id} event={event} />
+              ))}
+            </TabsContent>
+
+            <TabsContent value="issues" className="m-0 space-y-3">
+              {issues.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Check className="h-8 w-8 text-accent" />
+                  <p className="mt-2 text-sm font-medium">No Issues</p>
+                  <p className="text-xs text-muted-foreground">All systems operating normally</p>
+                </div>
+              ) : (
+                issues.map(issue => (
+                  <IssueItem 
+                    key={issue.id} 
+                    issue={issue}
+                    onAcknowledge={() => acknowledgeIssue(issue.id)}
+                    onResolve={() => resolveIssue(issue.id)}
+                  />
+                ))
+              )}
+            </TabsContent>
+
+            <TabsContent value="maintenance" className="m-0 space-y-3">
+              {maintenanceEvents.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Wrench className="h-8 w-8 text-muted-foreground" />
+                  <p className="mt-2 text-sm font-medium">No Maintenance Scheduled</p>
+                  <p className="text-xs text-muted-foreground">All equipment up to date</p>
+                </div>
+              ) : (
+                maintenanceEvents.map(event => (
+                  <MaintenanceItem key={event.id} event={event} />
+                ))
+              )}
+            </TabsContent>
+
+            <TabsContent value="recommendations" className="m-0 space-y-3">
+              {recommendations.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Sparkles className="h-8 w-8 text-muted-foreground" />
+                  <p className="mt-2 text-sm font-medium">No Recommendations</p>
+                  <p className="text-xs text-muted-foreground">AI is analyzing the system</p>
+                </div>
+              ) : (
+                recommendations.map(rec => (
+                  <RecommendationItem key={rec.id} rec={rec} />
+                ))
+              )}
+            </TabsContent>
+          </ScrollArea>
+        </Tabs>
+      </CardContent>
+    </Card>
+  );
+}

@@ -1,0 +1,282 @@
+"use client";
+
+import { useCallback, useRef, useMemo } from "react";
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  MiniMap,
+  Panel,
+  useReactFlow,
+  BackgroundVariant,
+} from "@xyflow/react";
+import type { NodeChange, EdgeChange, Connection } from "@xyflow/react";
+import { useDroppable } from "@dnd-kit/core";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { nodeTypes } from "./custom-nodes";
+import { useBuilderStore, type HVACNode } from "@/lib/builder-store";
+import {
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Play,
+  Pause,
+  RotateCcw,
+  Download,
+} from "lucide-react";
+import { toast } from "sonner";
+
+import "@xyflow/react/dist/style.css";
+
+const proOptions = { hideAttribution: true };
+
+export function BuilderCanvas() {
+  const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const { fitView, zoomIn, zoomOut } = useReactFlow();
+  
+  const {
+    nodes,
+    edges,
+    onNodesChange: storeOnNodesChange,
+    onEdgesChange: storeOnEdgesChange,
+    onConnect: storeOnConnect,
+    simulationActive,
+    toggleSimulation,
+    resetLayout,
+    selectedNodeId,
+    setSelectedNode,
+  } = useBuilderStore();
+
+  // Ensure all nodes have valid positions
+  const validNodes = useMemo(() => {
+    return nodes.map((node, index) => {
+      if (!node.position || typeof node.position.x !== 'number' || typeof node.position.y !== 'number') {
+        return {
+          ...node,
+          position: { x: 100 + (index % 3) * 250, y: 100 + Math.floor(index / 3) * 150 },
+        };
+      }
+      return node;
+    });
+  }, [nodes]);
+
+  const { setNodeRef, isOver } = useDroppable({
+    id: "builder-canvas",
+  });
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<HVACNode>[]) => {
+      storeOnNodesChange(changes);
+    },
+    [storeOnNodesChange]
+  );
+
+  const handleEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      storeOnEdgesChange(changes);
+    },
+    [storeOnEdgesChange]
+  );
+
+  const handleConnect = useCallback(
+    (connection: Connection) => {
+      storeOnConnect(connection);
+      toast.success("Connection created");
+    },
+    [storeOnConnect]
+  );
+
+  const onNodeClick = useCallback(
+    (_: React.MouseEvent, node: HVACNode) => {
+      setSelectedNode(node.id);
+    },
+    [setSelectedNode]
+  );
+
+  const onPaneClick = useCallback(() => {
+    setSelectedNode(null);
+  }, [setSelectedNode]);
+
+  const handleSave = () => {
+    const data = { nodes, edges };
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "hvac-system.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("System configuration saved");
+  };
+
+  return (
+    <div
+      ref={(el) => {
+        setNodeRef(el);
+        if (reactFlowWrapper.current === null && el) {
+          (reactFlowWrapper as React.MutableRefObject<HTMLDivElement | null>).current = el;
+        }
+      }}
+      className={cn(
+        "flex-1 relative",
+        isOver && "ring-2 ring-primary ring-inset"
+      )}
+    >
+      <ReactFlow
+        nodes={validNodes}
+        edges={edges}
+        onNodesChange={handleNodesChange}
+        onEdgesChange={handleEdgesChange}
+        onConnect={handleConnect}
+        onNodeClick={onNodeClick}
+        onPaneClick={onPaneClick}
+        nodeTypes={nodeTypes}
+        proOptions={proOptions}
+        fitView
+        snapToGrid
+        snapGrid={[15, 15]}
+        defaultEdgeOptions={{
+          animated: simulationActive,
+          style: { stroke: "hsl(var(--chart-1))", strokeWidth: 2 },
+        }}
+        className="bg-background"
+      >
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={20}
+          size={1}
+          color="hsl(var(--border))"
+        />
+        
+        <Controls
+          showZoom={false}
+          showFitView={false}
+          showInteractive={false}
+          className="!bg-card !border-border !shadow-lg"
+        />
+
+        <MiniMap
+          nodeColor={(node) => {
+            const colors: Record<string, string> = {
+              ahu: "hsl(var(--chart-1))",
+              chiller: "hsl(var(--chart-2))",
+              boiler: "hsl(var(--chart-3))",
+              vav: "hsl(var(--chart-4))",
+              zone: "hsl(var(--secondary))",
+              sensor: "hsl(var(--chart-5))",
+              pump: "hsl(var(--primary))",
+            };
+            return colors[node.type || ""] || "hsl(var(--muted))";
+          }}
+          maskColor="hsl(var(--background) / 0.8)"
+          className="!bg-card !border-border"
+          pannable
+          zoomable
+        />
+
+        {/* Top toolbar */}
+        <Panel position="top-center" className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-card/95 p-1 shadow-lg backdrop-blur-sm">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => zoomOut()}
+              className="h-8 w-8 p-0"
+            >
+              <ZoomOut className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => zoomIn()}
+              className="h-8 w-8 p-0"
+            >
+              <ZoomIn className="h-4 w-4" />
+            </Button>
+            <div className="h-4 w-px bg-border" />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => fitView({ padding: 0.2 })}
+              className="h-8 w-8 p-0"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-card/95 p-1 shadow-lg backdrop-blur-sm">
+            <Button
+              variant={simulationActive ? "default" : "ghost"}
+              size="sm"
+              onClick={toggleSimulation}
+              className={cn(
+                "h-8 gap-1.5",
+                simulationActive && "bg-accent hover:bg-accent/90 text-accent-foreground"
+              )}
+            >
+              {simulationActive ? (
+                <>
+                  <Pause className="h-4 w-4" />
+                  Running
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4" />
+                  Simulate
+                </>
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={resetLayout}
+              className="h-8 w-8 p-0"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-card/95 p-1 shadow-lg backdrop-blur-sm">
+            <Button variant="ghost" size="sm" onClick={handleSave} className="h-8 gap-1.5">
+              <Download className="h-4 w-4" />
+              Export
+            </Button>
+          </div>
+        </Panel>
+
+        {/* Status bar */}
+        <Panel position="bottom-left" className="flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-card/95 px-3 py-1.5 shadow-lg backdrop-blur-sm">
+            <Badge variant="outline" className="text-xs">
+              {validNodes.length} nodes
+            </Badge>
+            <Badge variant="outline" className="text-xs">
+              {edges.length} connections
+            </Badge>
+            {simulationActive && (
+              <Badge className="bg-accent/20 text-accent border-accent/30 text-xs animate-pulse">
+                Simulating
+              </Badge>
+            )}
+          </div>
+        </Panel>
+
+        {/* Selected node info */}
+        {selectedNodeId && (
+          <Panel position="bottom-right">
+            <div className="rounded-lg border border-border bg-card/95 p-3 shadow-lg backdrop-blur-sm max-w-xs">
+              <p className="text-xs text-muted-foreground mb-1">Selected</p>
+              <p className="text-sm font-medium">
+                {validNodes.find((n) => n.id === selectedNodeId)?.data.name || selectedNodeId}
+              </p>
+            </div>
+          </Panel>
+        )}
+      </ReactFlow>
+    </div>
+  );
+}
