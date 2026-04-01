@@ -15,7 +15,7 @@ import {
 } from '@xyflow/react';
 
 // Node data types
-export interface CoolingUnitNodeData {
+export interface CoolingUnitNodeData extends Record<string, unknown> {
   type: 'cooling-unit';
   name: string;
   unitType: 'AHU' | 'FCU' | 'Chiller' | 'Split';
@@ -29,7 +29,7 @@ export interface CoolingUnitNodeData {
   warningFlags: string[];
 }
 
-export interface DamperNodeData {
+export interface DamperNodeData extends Record<string, unknown> {
   type: 'damper';
   name: string;
   openness: number;
@@ -40,7 +40,7 @@ export interface DamperNodeData {
   warnings: string[];
 }
 
-export interface RoomNodeData {
+export interface RoomNodeData extends Record<string, unknown> {
   type: 'room';
   name: string;
   roomType: 'office' | 'meeting-room' | 'lab' | 'hallway' | 'classroom' | 'executive-office' | 'server-room' | 'lobby';
@@ -54,7 +54,16 @@ export interface RoomNodeData {
   issues: string[];
 }
 
-export type HVACNodeData = CoolingUnitNodeData | DamperNodeData | RoomNodeData;
+export interface GenericBuilderNodeData {
+  label: string;
+  [key: string]: unknown;
+}
+
+export type HVACNodeData =
+  | CoolingUnitNodeData
+  | DamperNodeData
+  | RoomNodeData
+  | GenericBuilderNodeData;
 
 export type HVACNode = Node<HVACNodeData>;
 export type HVACEdge = Edge;
@@ -70,7 +79,11 @@ interface BuilderState {
   onNodesChange: (changes: NodeChange<HVACNode>[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
-  addNode: (node: HVACNode) => void;
+  addNode: (
+    type: string,
+    position: { x: number; y: number },
+    metadata?: { label?: string }
+  ) => void;
   deleteNode: (id: string) => void;
   deleteEdge: (id: string) => void;
   updateNodeData: (id: string, data: Partial<HVACNodeData>) => void;
@@ -78,6 +91,7 @@ interface BuilderState {
   toggleAIOverlay: () => void;
   toggleSimulation: () => void;
   resetLayout: () => void;
+  duplicateNode: (id: string) => void;
   randomizeMetadata: () => void;
   saveLayout: () => void;
   loadLayout: () => void;
@@ -130,6 +144,68 @@ const generateRoomData = (name: string): RoomNodeData => {
     issues: Math.random() > 0.8 ? ['Temperature deviation'] : [],
   };
 };
+
+function createPaletteNodeData(type: string, label: string): HVACNodeData {
+  switch (type) {
+    case 'ahu':
+      return {
+        label,
+        capacity: 2500,
+        status: 'idle',
+      };
+    case 'chiller':
+      return {
+        label,
+        capacity: 120,
+        efficiency: 85,
+        status: 'off',
+      };
+    case 'boiler':
+      return {
+        label,
+        capacity: 50000,
+        temperature: 180,
+        status: 'standby',
+      };
+    case 'vav':
+      return {
+        label,
+        zone: 'Zone A',
+        damperPosition: 50,
+        flowRate: 500,
+      };
+    case 'zone':
+      return {
+        label,
+        currentTemp: 72,
+        setpoint: 70,
+        occupancy: 0,
+        status: 'optimal',
+      };
+    case 'sensor':
+      return {
+        label,
+        sensorType: 'temperature',
+        value: 72,
+        unit: 'F',
+      };
+    case 'pump':
+      return {
+        label,
+        speed: 60,
+        power: 4.5,
+        status: 'running',
+      };
+    case 'coolingUnit':
+      return generateCoolingUnitData(label);
+    case 'damper':
+      return generateDamperData(label);
+    case 'room':
+      return generateRoomData(label);
+    default:
+      return { label };
+  }
+}
 
 // Initial demo layout
 const initialNodes: HVACNode[] = [
@@ -282,9 +358,20 @@ export const useBuilderStore = create<BuilderState>()(
         });
       },
 
-      addNode: (node) => {
+      addNode: (type, position, metadata) => {
+        const nodes = get().nodes;
+        const nextId = generateNodeId(type);
+        const fallbackLabel = `${type.charAt(0).toUpperCase()}${type.slice(1)} ${nodes.filter((node) => node.type === type).length + 1}`;
+        const label = metadata?.label || fallbackLabel;
+        const newNode: HVACNode = {
+          id: nextId,
+          type,
+          position,
+          data: createPaletteNodeData(type, label),
+        };
+
         set({
-          nodes: [...get().nodes, node],
+          nodes: [...nodes, newNode],
         });
       },
 
@@ -330,15 +417,43 @@ export const useBuilderStore = create<BuilderState>()(
         });
       },
 
+      duplicateNode: (id) => {
+        const node = get().nodes.find((n) => n.id === id);
+        if (!node) return;
+        const label = typeof node.data.label === 'string' ? node.data.label : undefined;
+        const name = typeof node.data.name === 'string' ? node.data.name : undefined;
+
+        const duplicatedNode: HVACNode = {
+          ...node,
+          id: generateNodeId(node.type || 'node'),
+          position: {
+            x: node.position.x + 40,
+            y: node.position.y + 40,
+          },
+          data: {
+            ...node.data,
+            ...(label ? { label: `${label} Copy` } : {}),
+            ...(name ? { name: `${name} Copy` } : {}),
+          } as HVACNodeData,
+        };
+
+        set({
+          nodes: [...get().nodes, duplicatedNode],
+          selectedNodeId: duplicatedNode.id,
+        });
+      },
+
       randomizeMetadata: () => {
         set({
           nodes: get().nodes.map(node => {
+            const name = typeof node.data.name === 'string' ? node.data.name : 'Node';
+
             if (node.data.type === 'cooling-unit') {
-              return { ...node, data: generateCoolingUnitData(node.data.name) };
+              return { ...node, data: generateCoolingUnitData(name) };
             } else if (node.data.type === 'damper') {
-              return { ...node, data: generateDamperData(node.data.name) };
+              return { ...node, data: generateDamperData(name) };
             } else if (node.data.type === 'room') {
-              return { ...node, data: generateRoomData(node.data.name) };
+              return { ...node, data: generateRoomData(name) };
             }
             return node;
           }),

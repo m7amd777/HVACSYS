@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { nodeTypes } from "./custom-nodes";
-import { useBuilderStore, type HVACNode } from "@/lib/builder-store";
+import { useBuilderStore, type HVACEdge, type HVACNode } from "@/lib/builder-store";
 import {
   ZoomIn,
   ZoomOut,
@@ -126,7 +126,7 @@ export function BuilderCanvas() {
         isOver && "ring-2 ring-primary ring-inset"
       )}
     >
-      <ReactFlow
+      <ReactFlow<HVACNode, HVACEdge>
         nodes={validNodes}
         edges={edges}
         onNodesChange={handleNodesChange}
@@ -271,7 +271,11 @@ export function BuilderCanvas() {
             <div className="rounded-lg border border-border bg-card/95 p-3 shadow-lg backdrop-blur-sm max-w-xs">
               <p className="text-xs text-muted-foreground mb-1">Selected</p>
               <p className="text-sm font-medium">
-                {validNodes.find((n) => n.id === selectedNodeId)?.data.name || selectedNodeId}
+                {String(
+                  validNodes.find((n) => n.id === selectedNodeId)?.data.name ||
+                    validNodes.find((n) => n.id === selectedNodeId)?.data.label ||
+                    selectedNodeId
+                )}
               </p>
             </div>
           </Panel>

@@ -51,40 +51,42 @@ const nodeColors: Record<string, string> = {
 };
 
 export function PropertiesPanel() {
-  const { nodes, selectedNode, updateNodeData, removeNode, duplicateNode } =
+  const { nodes, selectedNodeId, updateNodeData, deleteNode, duplicateNode } =
     useBuilderStore();
-  const node = nodes.find((n) => n.id === selectedNode);
+  const node = nodes.find((n) => n.id === selectedNodeId);
   const [localData, setLocalData] = useState<Record<string, unknown>>({});
 
   useEffect(() => {
     if (node) {
-      setLocalData(node.data);
+      setLocalData(node.data as Record<string, unknown>);
     }
   }, [node]);
 
   const handleChange = (key: string, value: unknown) => {
-    const newData = { ...localData, [key]: value };
+    const nextKey =
+      key === "displayName" ? (node?.type === "coolingUnit" || node?.type === "damper" || node?.type === "room" ? "name" : "label") : key;
+    const newData = { ...localData, [nextKey]: value };
     setLocalData(newData);
-    if (selectedNode) {
-      updateNodeData(selectedNode, newData);
+    if (selectedNodeId) {
+      updateNodeData(selectedNodeId, newData);
     }
   };
 
   const handleDelete = () => {
-    if (selectedNode) {
-      removeNode(selectedNode);
+    if (selectedNodeId) {
+      deleteNode(selectedNodeId);
       toast.success("Node deleted");
     }
   };
 
   const handleDuplicate = () => {
-    if (selectedNode) {
-      duplicateNode(selectedNode);
+    if (selectedNodeId) {
+      duplicateNode(selectedNodeId);
       toast.success("Node duplicated");
     }
   };
 
-  if (!node || !selectedNode) {
+  if (!node || !selectedNodeId) {
     return (
       <div className="w-72 border-l border-border bg-card/50 p-4 flex flex-col items-center justify-center text-center">
         <Settings2 className="h-12 w-12 text-muted-foreground/30 mb-3" />
@@ -110,7 +112,7 @@ export function PropertiesPanel() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-foreground truncate">
-              {String(localData.label || "Untitled")}
+              {String(localData.name || localData.label || "Untitled")}
             </p>
             <Badge variant="outline" className="text-xs capitalize">
               {node.type}
@@ -148,8 +150,8 @@ export function PropertiesPanel() {
           </Label>
           <Input
             id="label"
-            value={String(localData.label || "")}
-            onChange={(e) => handleChange("label", e.target.value)}
+            value={String(localData.name || localData.label || "")}
+            onChange={(e) => handleChange("displayName", e.target.value)}
             className="h-9"
           />
         </div>
@@ -209,7 +211,7 @@ export function PropertiesPanel() {
             </div>
             <div className="space-y-3">
               <Label className="text-xs text-muted-foreground">
-                Efficiency: {localData.efficiency || 85}%
+                Efficiency: {Number(localData.efficiency) || 85}%
               </Label>
               <Slider
                 value={[Number(localData.efficiency) || 85]}
@@ -298,7 +300,7 @@ export function PropertiesPanel() {
             </div>
             <div className="space-y-3">
               <Label className="text-xs text-muted-foreground">
-                Damper Position: {localData.damperPosition || 50}%
+                Damper Position: {Number(localData.damperPosition) || 50}%
               </Label>
               <Slider
                 value={[Number(localData.damperPosition) || 50]}
@@ -431,7 +433,7 @@ export function PropertiesPanel() {
           <>
             <div className="space-y-3">
               <Label className="text-xs text-muted-foreground">
-                Speed: {localData.speed || 0}%
+                Speed: {Number(localData.speed) || 0}%
               </Label>
               <Slider
                 value={[Number(localData.speed) || 0]}
